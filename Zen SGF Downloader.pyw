@@ -7,8 +7,8 @@ without information about the rank of the players
 
 __author__="Juan A. Vargas Mesén (Leira)"
 __copyright__ = "© 2023, Leira"
-__date__="2023/29/4"
-__version__ = "1.0"
+__date__="2023/30/4"
+__version__ = "1.0.1"
 __license__="MIT"
 __status__ = "Release"
 
@@ -42,6 +42,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import requests
+import re
 from functools import lru_cache
 import tkinter as tk
 from tkinter.filedialog import asksaveasfile
@@ -55,9 +56,6 @@ APP_NAME="Zen SGF Downloader"
 URL="https://online-go.com/termination-api/game/{}"
 SGF="https://online-go.com/api/v1/games/{}/sgf"
 ORDINARY_URL="https://online-go.com/game/{}"
-
-MAIN_GAME=None
-
 NaN=float('nan')
 
 # Characters that shouldn't be used in a file path
@@ -69,12 +67,24 @@ def forbidden_char(ch):
 def sanitize_filename(s):
     return "".join(ch for ch in s if not forbidden_char(ch))
 
+# Does not really check where the url comes from
+# just that the final bit is a valid game number.
 def url_to_number(s):
-    components=reversed(s.split("/"))
-    x=next(components)
-    while x=="":
+    try:
+        components=reversed(s.split("/"))
         x=next(components)
-    return int(x)
+        while x=="":
+            x=next(components)
+        return int(x)
+    except StopIteration:
+        raise ValueError("Invalid url string") from None
+
+
+# Modified from function by jooom
+def remove_ranks(sgf):
+    regex = '[BW]R\\[.+\\]\n?'
+    return re.sub(regex, '', sgf)
+    
 
 # Main class to retrieve games from OGS
 class Game:
@@ -86,7 +96,9 @@ class Game:
     @lru_cache(maxsize=1)
     def __init__(self, game_id):
         print("Requesting game info from server: {}".format(game_id))
-        d=requests.get(URL.format(game_id)).json()
+        r=requests.get(URL.format(game_id))
+        r.raise_for_status()
+        d=r.json()
         self.id=game_id
         self.name=d['game_name']
         self.black=d['players']['black']['username']
@@ -114,25 +126,19 @@ class Game:
     @lru_cache(maxsize=1)
     def get_sgf(self):
         print("Requesting SGF from server: {}".format(self.id))
-        sgf=requests.get(SGF.format(self.id)).text
+        r=requests.get(SGF.format(self.id))
+        r.raise_for_status()
+        sgf=r.text
         print("SGF retrieved: {}".format(self.id))
         return sgf
 
-    def save_sgf(self, gui_element=None):
+    def save_sgf(self, open_file=lambda x: None):
         print("Saving file: {}".format(self.id))
         sgf=self.get_sgf()
-        file = asksaveasfile(
-            parent=gui_element,
-            mode='w',
-            filetypes=[("Smart Game Format", ".sgf")],
-            defaultextension=".sgf",
-            initialfile=self.default_filename,)
+        file=open_file(self.default_filename)
         if file is not None:
             with file as stream:
-                for line in sgf.splitlines():
-                    if line[:2] not in {'BR','WR'}:
-                        stream.write(line)
-                        stream.write("\n")
+                stream.write(remove_ranks(sgf))
             print("File saved: {}".format(self.id))
             return True
         else:
@@ -142,6 +148,9 @@ class Game:
 #########
 ## GUI ##
 #########
+
+MAIN_GAME=None
+ERROR_HANDLERS={}
 
 string_welcome="🌸 Welcome to the Zen SGF Downloader 🌸"
 string_opening='''\
@@ -165,21 +174,32 @@ Status: {phase} (move {m})
 string_download="⇩ Download SGF"
 string_filesaved="\n🥂  Cheers! Your file has been saved  🥂"
 string_oops="Oops!"
-string_error="An error has occurred.\n{}"
+string_error="An error has occurred.\n\n{}"
 
 
+# For error reporting
 def callback_wrapper(f):
     def wrapped():
         try:
             f()
         except Exception as e:
-            explanation="\"{}: {}\"".format(type(e).__name__, str(e))
+            explanation="{}: {}".format(type(e).__name__, str(e))
             tk.messagebox.showerror(
                 title=string_oops,
                 message=string_error.format(explanation),
                 parent=root)
+            handler=ERROR_HANDLERS.get(wrapped,lambda error: None)
+            handler(e)
             raise e from None
     return wrapped
+
+def get_savefile(filename):
+    return asksaveasfile(
+        parent=root,
+        mode='w',
+        filetypes=[("Smart Game Format", ".sgf")],
+        defaultextension=".sgf",
+        initialfile=filename,)
 
 
 @callback_wrapper
@@ -222,11 +242,21 @@ def callback_ok():
     else:
         button_download.config(state=tk.DISABLED)
 
+def callback_ok_error(error):
+    global MAIN_GAME
+    MAIN_GAME=None
+    text_card.config(state=tk.NORMAL)
+    text_card.delete("1.0",tk.END)
+    text_card.config(state=tk.DISABLED)
+    button_download.config(state=tk.DISABLED)
+
+ERROR_HANDLERS[callback_ok]=callback_ok_error
+
 
 @callback_wrapper
 def callback_download():
     button_download.focus()
-    success=MAIN_GAME.save_sgf(gui_element=root)
+    success=MAIN_GAME.save_sgf(open_file=get_savefile)
     if success:
         text_card.config(state=tk.NORMAL)
         text_card.delete("5.0",tk.END)
@@ -280,6 +310,7 @@ button_download = tk.Button(
     frame2, text=string_download, font=('Times New Roman', 12),
     command=callback_download, cursor="hand2")
 button_download.grid(column=0,row=1, sticky=tk.EW)
+button_download.config(state=tk.DISABLED)
 
 
 root.mainloop()
