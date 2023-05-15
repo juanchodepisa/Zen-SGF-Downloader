@@ -7,7 +7,7 @@ without information about the rank of the players
 
 __author__="Juan A. Vargas Mesén (Leira)"
 __copyright__ = "© 2023, Leira"
-__date__="2023/30/4"
+__date__="2023/5/15"
 __version__ = "1.0.1"
 __license__="MIT"
 __status__ = "Release"
