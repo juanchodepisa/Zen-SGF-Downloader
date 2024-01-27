@@ -8,7 +8,7 @@ without information about the rank of the players
 __author__="Juan A. Vargas Mesén (Leira)"
 __copyright__ = "© 2023, Leira"
 __date__="2023/5/15"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __license__="MIT"
 __status__ = "Release"
 
@@ -268,7 +268,7 @@ def callback_download():
 
 root = tk.Tk()
 
-root.geometry("800x530")
+root.geometry("800x560")
 root.title(APP_NAME)
 
 frame0=tk.Frame(root)
@@ -302,7 +302,7 @@ frame2=tk.Frame(root, relief=tk.GROOVE, bd=1)
 frame2.pack(pady=5)
 
 text_card= tk.Text(
-    frame2, font=('Calibri Light', 15, 'italic'), height=5, width=50,
+    frame2, font=('Calibri Light', 15, 'italic'), height=6, width=50,
     spacing1=5,spacing2=5, spacing3=5, bg="#FCF5E5", cursor="arrow")
 text_card.tag_configure("justify_center", justify='center')
 text_card.grid(column=0,row=0)
